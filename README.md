@@ -125,7 +125,24 @@ npm run dev
 
 ## 品牌素材
 
-目前畫面左上角是文字版的品牌標誌（`src/components/ledger/BrandMark.tsx`）。官方 logo 和形象照放進 `public/brand/` 後即可替換。
+原始檔放在 `brand-source/`，網站用的版本都由腳本產生，**不要手動修改 `public/brand/` 裡的檔案**：
+
+| 產出 | 用途 | 怎麼來的 |
+|---|---|---|
+| `public/brand/crest.png` | 頁首徽章 | 從 logo 裁出皇冠＋盾牌＋花紋，抽出墨線、底色轉透明 |
+| `public/brand/logo-plate.webp` | 登入頁 | 完整 logo 沿圓盤裁成圓形，去掉外圍大理石方角 |
+| `public/brand/nails.webp` | 登入頁照片 | 作品照轉 WebP |
+| `src/app/icon.png`、`apple-icon.png` | 瀏覽器分頁圖示、手機主畫面圖示 | 徽章放在圓盤底色上 |
+
+頁首的「仙度瑞拉 / Cinderella」是用字型排的，不是從 logo 裁的：logo 裡的字縮到頁首大小會糊掉。
+
+logo 改版時：換掉 `brand-source/logo.jpg`（或 `nails.jpg`），然後執行
+
+```bash
+node scripts/brand-assets.mjs
+```
+
+如果新 logo 的構圖不同，要重新量 `scripts/brand-assets.mjs` 開頭的 `PLATE`（圓盤位置）和 `CREST`（徽章範圍）。
 
 ## 開發指令
 

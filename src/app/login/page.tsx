@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import { redirect } from "next/navigation";
 
-import { BrandMark } from "@/components/ledger/BrandMark";
 import { getSessionUser } from "@/lib/dal";
 
 export const metadata: Metadata = { title: "登入" };
@@ -24,33 +24,63 @@ function GoogleLogo() {
   );
 }
 
+/**
+ * Phone: the signature nail photo as a banner with the sign-in card lifted over its lower edge.
+ * Desktop: photo and card side by side as one panel.
+ */
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   if (await getSessionUser()) redirect("/");
   const { error } = await searchParams;
   const message = error ? ERRORS[error] : undefined;
 
   return (
-    <main className="grid min-h-dvh place-items-center px-4 py-10">
-      <div className="card w-full max-w-sm px-6 py-10 text-center md:px-8">
-        <BrandMark size="lg" className="justify-center" />
-        <div className="gold-rule mx-auto my-7 w-3/4" />
-        <h1 className="text-xl">店內記帳</h1>
-        <p className="mt-2 text-sm leading-relaxed text-ink-muted">
-          每一筆收入與成本都會即時寫進店裡的 Google 試算表，月底直接對帳。
-        </p>
+    <main className="min-h-dvh md:grid md:place-items-center md:p-8">
+      {/* `.card` is a component class, which Tailwind v4 variants can't prefix, so the desktop panel
+          spells out the same surface with utilities. */}
+      <div className="md:grid md:w-full md:max-w-4xl md:grid-cols-[1fr_1.05fr] md:overflow-hidden md:rounded-[var(--radius-card)] md:border md:border-line md:bg-veil/90 md:shadow-[var(--shadow-card)]">
+        {/* Phones: the photo itself fades out (mask), revealing the real page background underneath —
+            fading to a flat colour would leave a seam against the body's tinted gradient. */}
+        <div className="relative h-[42dvh] min-h-64 overflow-hidden [mask-image:linear-gradient(to_bottom,black_65%,transparent)] md:h-auto md:min-h-[36rem] md:[mask-image:none]">
+          <Image
+            src="/brand/nails.webp"
+            alt="仙度瑞拉的裸粉金箔杏仁形指甲作品"
+            fill
+            priority
+            sizes="(min-width: 768px) 440px, 100vw"
+            className="object-cover object-[50%_40%]"
+          />
+        </div>
 
-        {message ? (
-          <p role="alert" className="mt-5 rounded-xl bg-loss-soft px-4 py-3 text-sm text-loss">
-            {message}
-          </p>
-        ) : null}
+        <div className="relative -mt-16 px-4 pb-10 md:mt-0 md:grid md:place-items-center md:px-10 md:py-12">
+          <div className="card px-6 pt-8 pb-8 text-center md:border-0 md:bg-transparent md:p-0 md:shadow-none md:backdrop-blur-none">
+            <Image
+              src="/brand/logo-plate.webp"
+              alt="仙度瑞拉 Cinderella Beauty Salon"
+              width={640}
+              height={640}
+              priority
+              className="mx-auto size-36 drop-shadow-[0_8px_20px_rgb(43_35_32/0.12)] md:size-44"
+            />
+            <div className="gold-rule mx-auto my-6 w-2/3" />
+            <h1 className="text-xl">店內記帳</h1>
+            <p className="mx-auto mt-2 max-w-72 text-sm leading-relaxed text-ink-muted">
+              每一筆收入與成本都會即時寫進店裡的 Google 試算表，月底直接對帳。
+            </p>
 
-        {/* A plain link: the route handler starts the Google OAuth redirect. */}
-        <a href="/api/auth/login" className="btn btn-outline mt-7 w-full gap-3 bg-white">
-          <GoogleLogo />
-          使用 Google 帳號登入
-        </a>
-        <p className="mt-4 text-xs text-ink-muted">僅限店內授權的 Gmail 帳號</p>
+            {message ? (
+              <p role="alert" className="mt-5 rounded-xl bg-loss-soft px-4 py-3 text-sm text-loss">
+                {message}
+              </p>
+            ) : null}
+
+            {/* A plain link: the route handler starts the Google OAuth redirect. */}
+            <a href="/api/auth/login" className="btn btn-outline mt-7 w-full max-w-80 gap-3 bg-white">
+              <GoogleLogo />
+              使用 Google 帳號登入
+            </a>
+            <p className="mt-4 text-xs text-ink-muted">僅限店內授權的 Gmail 帳號</p>
+          </div>
+        </div>
       </div>
     </main>
   );
