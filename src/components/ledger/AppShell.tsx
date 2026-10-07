@@ -7,7 +7,7 @@ import { useEffect } from "react";
 import { BrandMark } from "@/components/ledger/BrandMark";
 import { MainNav } from "@/components/ledger/MainNav";
 import { DEMO_MODE } from "@/lib/demo";
-import { signOut } from "@/lib/google-auth";
+import { preloadGoogleSignIn, signOut } from "@/lib/google-auth";
 import { useSessionUser } from "@/lib/use-ledger";
 
 /**
@@ -22,6 +22,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!user) router.replace("/login");
   }, [user, router]);
+
+  // Tokens last an hour; renewing one may open Google's popup, which needs the script ready.
+  useEffect(() => {
+    if (!DEMO_MODE) preloadGoogleSignIn();
+  }, []);
 
   if (!user) {
     return <div className="grid min-h-dvh place-items-center text-sm text-ink-muted">正在確認登入狀態…</div>;

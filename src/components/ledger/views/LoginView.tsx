@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { asset, isAllowed } from "@/config";
-import { signIn, SignInError } from "@/lib/google-auth";
+import { preloadGoogleSignIn, signIn, SignInError } from "@/lib/google-auth";
 import { useSessionUser } from "@/lib/use-ledger";
 
 function GoogleLogo() {
@@ -32,6 +32,8 @@ export function LoginView() {
   useEffect(() => {
     if (user) router.replace("/");
   }, [user, router]);
+
+  useEffect(preloadGoogleSignIn, []);
 
   async function handleSignIn() {
     setPending(true);

@@ -66,6 +66,17 @@ function loadGis(): Promise<GoogleOAuth2> {
   return gisLoading;
 }
 
+/**
+ * Load Google's script ahead of time. The popup has to open inside the click that asked for it;
+ * if the click first waits for a network download, Safari treats the popup as unsolicited and
+ * blocks it.
+ */
+export function preloadGoogleSignIn() {
+  loadGis().catch(() => {
+    // Reported again, with a message, when the user actually signs in.
+  });
+}
+
 export class SignInError extends Error {
   constructor(
     message: string,
