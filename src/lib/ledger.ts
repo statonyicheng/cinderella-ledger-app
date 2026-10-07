@@ -18,7 +18,6 @@ import { monthOf, nowStamp, todayISO } from "@/lib/format";
  *   成本      one row per expense
  *   服務項目 / 付款方式 / 成本類型   editable pick-lists
  *   工作室設定  key/value settings
- *   許願池    staff suggestions
  */
 
 export const TABS = {
@@ -29,7 +28,6 @@ export const TABS = {
   paymentMethods: "付款方式",
   expenseCategories: "成本類型",
   settings: "工作室設定",
-  wishes: "許願池",
 } as const;
 
 const SCHEMA: Record<string, readonly string[]> = {
@@ -40,7 +38,6 @@ const SCHEMA: Record<string, readonly string[]> = {
   [TABS.paymentMethods]: ["名稱"],
   [TABS.expenseCategories]: ["名稱"],
   [TABS.settings]: ["鍵", "值"],
-  [TABS.wishes]: ["ID", "項目", "說明", "提出者", "建立時間", "狀態"],
 };
 
 /** Seeded once, the first time a pick-list tab is found empty. Fully editable in 設定. */
@@ -85,15 +82,6 @@ export interface ExpenseRecord {
 }
 
 export type LedgerRecord = IncomeRecord | ExpenseRecord;
-
-export interface Wish {
-  id: string;
-  title: string;
-  description: string;
-  createdBy: string;
-  createdAt: string;
-  status: string;
-}
 
 /**
  * Every read and write waits for this. In demo mode it also waits for the sample data, so a
@@ -248,21 +236,6 @@ export async function getShopName(): Promise<string> {
   return str(row?.[1]) || "仙度瑞拉 Cinderella";
 }
 
-export async function listWishes(email: string): Promise<Wish[]> {
-  await ready();
-  return (await readRows(TABS.wishes))
-    .filter((r) => str(r[0]) && str(r[3]).toLowerCase() === email.toLowerCase())
-    .map((r) => ({
-      id: str(r[0]),
-      title: str(r[1]),
-      description: str(r[2]),
-      createdBy: str(r[3]),
-      createdAt: str(r[4]),
-      status: str(r[5]) || "已收到",
-    }))
-    .reverse();
-}
-
 /* ----------------------------------------------------------------- writes */
 
 export interface IncomeInput {
@@ -371,11 +344,6 @@ export async function setShopName(name: string) {
   await ready();
   const updated = await updateRowById(TABS.settings, "店名", ["店名", name]);
   if (!updated) await appendRows(TABS.settings, [["店名", name]]);
-}
-
-export async function createWish(title: string, description: string, createdBy: string) {
-  await ready();
-  await appendRows(TABS.wishes, [[newId("WISH"), title, description, createdBy, nowStamp(), "已收到"]]);
 }
 
 /* ---------------------------------------------------------------- reports */

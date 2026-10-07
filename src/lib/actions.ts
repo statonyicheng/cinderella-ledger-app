@@ -15,7 +15,6 @@ import {
   addPickListItem,
   createExpense,
   createIncome,
-  createWish,
   deleteRecord,
   type PickList,
   removePickListItem,
@@ -160,14 +159,4 @@ export async function saveShopName(_prev: ActionState, formData: FormData): Prom
   const name = text(40).min(1, "請輸入店名").safeParse(formData.get("shopName") ?? "");
   if (!name.success) return { ok: false, message: firstIssue(name.error) };
   return guard(() => setShopName(name.data), "店名已儲存");
-}
-
-export async function submitWish(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const email = currentEmail();
-  if (!email) return NOT_SIGNED_IN;
-  const parsed = z
-    .object({ title: text(120).min(1, "請填寫想要的功能"), description: text(2000).min(1, "請補充說明") })
-    .safeParse({ title: formData.get("title") ?? "", description: formData.get("description") ?? "" });
-  if (!parsed.success) return { ok: false, message: firstIssue(parsed.error) };
-  return guard(() => createWish(parsed.data.title, parsed.data.description, email), "收到你的許願了，謝謝！");
 }

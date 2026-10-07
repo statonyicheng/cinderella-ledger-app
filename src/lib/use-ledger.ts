@@ -10,8 +10,6 @@ import {
   type IncomeRecord,
   listExpenses,
   listIncome,
-  listWishes,
-  type Wish,
 } from "@/lib/ledger";
 import { getDataVersion, getUser, type SessionUser, subscribe } from "@/lib/session";
 
@@ -88,12 +86,4 @@ async function loadLedger(): Promise<LedgerData> {
 
 export function useLedger() {
   return useSheetQuery(loadLedger);
-}
-
-async function loadWishes(user: SessionUser): Promise<Wish[]> {
-  return listWishes(user.email);
-}
-
-export function useWishes() {
-  return useSheetQuery(loadWishes);
 }

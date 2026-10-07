@@ -3,7 +3,7 @@
 import { Plus, X } from "lucide-react";
 import { useActionState, useEffect, useRef, useState } from "react";
 
-import { type ActionState, addListItem, removeListItem, saveShopName, submitWish } from "@/lib/actions";
+import { type ActionState, addListItem, removeListItem, saveShopName } from "@/lib/actions";
 import type { PickList } from "@/lib/ledger";
 import { cn } from "@/lib/utils";
 
@@ -90,35 +90,5 @@ export function PickListEditor({ list, items, placeholder }: { list: PickList; i
       </form>
       <Status state={state} />
     </div>
-  );
-}
-
-export function WishForm() {
-  const [state, action, pending] = useActionState(submitWish, IDLE);
-  const formRef = useResetOnSuccess(state);
-
-  return (
-    <form ref={formRef} action={action} className="grid gap-4">
-      <label className="block">
-        <span className="label">想要的功能或改善</span>
-        <input name="title" required maxLength={120} placeholder="例如：每週自動寄營收摘要到 LINE" className="field" />
-      </label>
-      <label className="block">
-        <span className="label">說明</span>
-        <textarea
-          name="description"
-          required
-          maxLength={2000}
-          rows={4}
-          placeholder="在什麼情況下會用到？它能幫你省下什麼麻煩？"
-          className="field resize-y"
-        />
-      </label>
-      <p className="text-xs text-ink-muted">請不要填寫密碼、信用卡號等敏感資料。</p>
-      <Status state={state} />
-      <button type="submit" disabled={pending} className="btn btn-primary w-full">
-        {pending ? "送出中…" : "送出許願"}
-      </button>
-    </form>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays, ChartPie, ReceiptText, Settings, Sparkles } from "lucide-react";
+import { CalendarDays, ChartPie, ReceiptText, Settings } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -10,7 +10,6 @@ const ITEMS = [
   { href: "/", label: "月曆", icon: CalendarDays },
   { href: "/records", label: "紀錄", icon: ReceiptText },
   { href: "/reports", label: "報表", icon: ChartPie },
-  { href: "/wish-pool", label: "許願池", icon: Sparkles },
   { href: "/settings", label: "設定", icon: Settings },
 ] as const;
 
