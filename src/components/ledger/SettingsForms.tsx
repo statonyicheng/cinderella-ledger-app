@@ -1,10 +1,10 @@
 "use client";
 
 import { Plus, X } from "lucide-react";
-import { useActionState, useEffect, useRef } from "react";
-import { useFormStatus } from "react-dom";
+import { useActionState, useEffect, useRef, useState } from "react";
 
-import { type ActionState, addListItem, removeListItem, saveShopName, submitWish } from "@/app/actions";
+import { type ActionState, addListItem, removeListItem, saveShopName, submitWish } from "@/lib/actions";
+import type { PickList } from "@/lib/ledger";
 import { cn } from "@/lib/utils";
 
 const IDLE: ActionState = { ok: false, message: "" };
@@ -44,15 +44,21 @@ export function ShopNameForm({ current }: { current: string }) {
   );
 }
 
-function RemoveChip({ list, name }: { list: string; name: string }) {
-  const { pending } = useFormStatus();
+function RemoveChip({ list, name }: { list: PickList; name: string }) {
+  const [pending, setPending] = useState(false);
   return (
     <button
-      type="submit"
+      type="button"
       disabled={pending}
+      onClick={async () => {
+        if (!window.confirm(`移除「${name}」？\n舊紀錄不受影響，只是之後不會出現在選單裡。`)) return;
+        setPending(true);
+        const result = await removeListItem(list, name);
+        setPending(false);
+        if (!result.ok) window.alert(result.message);
+      }}
       className="grid size-6 place-items-center rounded-full text-ink-muted hover:bg-loss-soft hover:text-loss"
       aria-label={`移除 ${name}`}
-      data-list={list}
     >
       <X className="size-3.5" aria-hidden="true" />
     </button>
@@ -60,7 +66,7 @@ function RemoveChip({ list, name }: { list: string; name: string }) {
 }
 
 /** An editable pick-list (services / payment methods / expense categories) as removable chips. */
-export function PickListEditor({ list, items, placeholder }: { list: string; items: string[]; placeholder: string }) {
+export function PickListEditor({ list, items, placeholder }: { list: PickList; items: string[]; placeholder: string }) {
   const [state, action, pending] = useActionState(addListItem, IDLE);
   const formRef = useResetOnSuccess(state);
 
@@ -70,16 +76,7 @@ export function PickListEditor({ list, items, placeholder }: { list: string; ite
         {items.map((name) => (
           <li key={name} className="flex items-center gap-1 rounded-full border border-line bg-veil py-1 pr-1 pl-3.5 text-sm">
             {name}
-            <form
-              action={removeListItem}
-              onSubmit={(e) => {
-                if (!window.confirm(`移除「${name}」？\n舊紀錄不受影響，只是之後不會出現在選單裡。`)) e.preventDefault();
-              }}
-            >
-              <input type="hidden" name="list" value={list} />
-              <input type="hidden" name="name" value={name} />
-              <RemoveChip list={list} name={name} />
-            </form>
+            <RemoveChip list={list} name={name} />
           </li>
         ))}
       </ul>

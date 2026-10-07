@@ -3,7 +3,7 @@
 import { Minus, Pencil, Plus, X } from "lucide-react";
 import { useActionState, useEffect, useId, useRef, useState } from "react";
 
-import { type ActionState, saveExpense, saveIncome } from "@/app/actions";
+import { type ActionState, saveExpense, saveIncome } from "@/lib/actions";
 import type { ExpenseRecord, IncomeItem, IncomeRecord } from "@/lib/ledger";
 import { cn } from "@/lib/utils";
 

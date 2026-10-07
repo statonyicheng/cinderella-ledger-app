@@ -1,10 +1,16 @@
-"use server";
+/**
+ * Form handlers, shaped like React's `useActionState` actions: `(prevState, formData) => state`.
+ *
+ * They run in the browser. Inputs are validated with zod, then written to the sheet with the
+ * signed-in user's own Google token. Whatever this code checks, Google re-checks: a user the
+ * sheet isn't shared with gets a 403 no matter what the page does.
+ */
 
-import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { requireUser } from "@/lib/dal";
+import { DEMO_MODE, DEMO_USER } from "@/lib/demo";
 import { isISODate } from "@/lib/format";
+import { SheetError } from "@/lib/google-sheets";
 import {
   addPickListItem,
   createExpense,
@@ -17,11 +23,7 @@ import {
   updateExpense,
   updateIncome,
 } from "@/lib/ledger";
-
-/**
- * Every action re-checks the session through the DAL before touching the sheet — server
- * actions are public HTTP endpoints, so the page-level check alone is not enough.
- */
+import { getUser, invalidate } from "@/lib/session";
 
 export interface ActionState {
   ok: boolean;
@@ -74,22 +76,29 @@ function firstIssue(error: z.ZodError) {
   return error.issues[0]?.message ?? "資料格式不正確";
 }
 
-function refreshLedger() {
-  for (const path of ["/", "/records", "/reports"]) revalidatePath(path);
+function currentEmail(): string | null {
+  if (DEMO_MODE) return DEMO_USER.email;
+  return getUser()?.email ?? null;
 }
 
-async function guard<T>(fn: () => Promise<T>, success: string): Promise<ActionState> {
+/** Run a write; on success refresh every view, on failure explain it in plain words. */
+async function guard(fn: () => Promise<unknown>, success: string): Promise<ActionState> {
   try {
     await fn();
+    invalidate();
     return { ok: true, message: success };
   } catch (error) {
     console.error("[ledger]", error);
-    return { ok: false, message: "儲存到 Google Sheet 時發生錯誤，請稍後再試。" };
+    if (error instanceof SheetError) return { ok: false, message: error.message };
+    return { ok: false, message: "儲存到 Google 試算表時發生錯誤，請稍後再試。" };
   }
 }
 
+const NOT_SIGNED_IN: ActionState = { ok: false, message: "登入已失效，請重新登入。" };
+
 export async function saveIncome(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const user = await requireUser();
+  const email = currentEmail();
+  if (!email) return NOT_SIGNED_IN;
   const parsed = incomeSchema.safeParse({
     date: formData.get("date"),
     customer: formData.get("customer") ?? "",
@@ -101,16 +110,15 @@ export async function saveIncome(_prev: ActionState, formData: FormData): Promis
   if (!parsed.success) return { ok: false, message: firstIssue(parsed.error) };
 
   const id = String(formData.get("id") ?? "");
-  const result = await guard(async () => {
-    if (id) await updateIncome(id, parsed.data, user.email);
-    else await createIncome(parsed.data, user.email);
-  }, id ? "收入已更新" : "收入已記錄");
-  if (result.ok) refreshLedger();
-  return result;
+  return guard(
+    () => (id ? updateIncome(id, parsed.data, email) : createIncome(parsed.data, email)),
+    id ? "收入已更新" : "收入已記錄",
+  );
 }
 
 export async function saveExpense(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const user = await requireUser();
+  const email = currentEmail();
+  if (!email) return NOT_SIGNED_IN;
   const parsed = expenseSchema.safeParse({
     date: formData.get("date"),
     category: formData.get("category") ?? "",
@@ -120,64 +128,46 @@ export async function saveExpense(_prev: ActionState, formData: FormData): Promi
   if (!parsed.success) return { ok: false, message: firstIssue(parsed.error) };
 
   const id = String(formData.get("id") ?? "");
-  const result = await guard(async () => {
-    if (id) await updateExpense(id, parsed.data, user.email);
-    else await createExpense(parsed.data, user.email);
-  }, id ? "成本已更新" : "成本已記錄");
-  if (result.ok) refreshLedger();
-  return result;
+  return guard(
+    () => (id ? updateExpense(id, parsed.data, email) : createExpense(parsed.data, email)),
+    id ? "成本已更新" : "成本已記錄",
+  );
 }
 
-export async function removeRecord(formData: FormData) {
-  await requireUser();
-  const kind = formData.get("kind");
-  const id = String(formData.get("id") ?? "");
-  if ((kind !== "income" && kind !== "expense") || !id) return;
-  await deleteRecord(kind, id);
-  refreshLedger();
+export async function removeRecord(kind: "income" | "expense", id: string): Promise<ActionState> {
+  if (!currentEmail()) return NOT_SIGNED_IN;
+  return guard(() => deleteRecord(kind, id), "已刪除");
 }
 
 const pickLists = ["services", "paymentMethods", "expenseCategories"] as const;
 
 export async function addListItem(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  await requireUser();
+  if (!currentEmail()) return NOT_SIGNED_IN;
   const list = formData.get("list");
   const name = text(40).min(1, "請輸入名稱").safeParse(formData.get("name") ?? "");
   if (!pickLists.includes(list as PickList)) return { ok: false, message: "未知的清單" };
   if (!name.success) return { ok: false, message: firstIssue(name.error) };
-  const result = await guard(() => addPickListItem(list as PickList, name.data), "已新增");
-  if (result.ok) revalidatePath("/settings");
-  return result;
+  return guard(() => addPickListItem(list as PickList, name.data), "已新增");
 }
 
-export async function removeListItem(formData: FormData) {
-  await requireUser();
-  const list = formData.get("list");
-  const name = String(formData.get("name") ?? "");
-  if (!pickLists.includes(list as PickList) || !name) return;
-  await removePickListItem(list as PickList, name);
-  revalidatePath("/settings");
+export async function removeListItem(list: PickList, name: string): Promise<ActionState> {
+  if (!currentEmail()) return NOT_SIGNED_IN;
+  return guard(() => removePickListItem(list, name), "已移除");
 }
 
 export async function saveShopName(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  await requireUser();
+  if (!currentEmail()) return NOT_SIGNED_IN;
   const name = text(40).min(1, "請輸入店名").safeParse(formData.get("shopName") ?? "");
   if (!name.success) return { ok: false, message: firstIssue(name.error) };
-  const result = await guard(() => setShopName(name.data), "店名已儲存");
-  if (result.ok) revalidatePath("/", "layout");
-  return result;
+  return guard(() => setShopName(name.data), "店名已儲存");
 }
 
 export async function submitWish(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const user = await requireUser();
+  const email = currentEmail();
+  if (!email) return NOT_SIGNED_IN;
   const parsed = z
     .object({ title: text(120).min(1, "請填寫想要的功能"), description: text(2000).min(1, "請補充說明") })
     .safeParse({ title: formData.get("title") ?? "", description: formData.get("description") ?? "" });
   if (!parsed.success) return { ok: false, message: firstIssue(parsed.error) };
-  const result = await guard(
-    () => createWish(parsed.data.title, parsed.data.description, user.email),
-    "收到你的許願了，謝謝！",
-  );
-  if (result.ok) revalidatePath("/wish-pool");
-  return result;
+  return guard(() => createWish(parsed.data.title, parsed.data.description, email), "收到你的許願了，謝謝！");
 }

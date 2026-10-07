@@ -1,14 +1,13 @@
 /**
- * Local demo mode — try the whole app before any Google setup exists.
+ * Local demo mode — try the whole app without Google.
  *
- * Active ONLY when both hold:
- *   - NODE_ENV is "development" (i.e. `npm run dev`; `next build`/`next start` and every Vercel
- *     deployment run as "production", so this can never switch on in a deployed app), and
- *   - LEDGER_DEMO=1 is set explicitly.
+ * Both values are inlined at build time. `next build` (and therefore every GitHub Pages
+ * deployment) always runs with NODE_ENV="production", so demo mode can never be switched on in
+ * the published site, even if NEXT_PUBLIC_LEDGER_DEMO were set by mistake.
  *
- * In demo mode the "spreadsheet" is an in-memory table and everyone is signed in as a demo user.
- * Nothing is written anywhere; restarting the dev server resets the data.
+ * In demo mode the "spreadsheet" lives in memory and a demo user is signed in automatically.
  */
-export const DEMO_MODE = process.env.NODE_ENV === "development" && process.env.LEDGER_DEMO === "1";
+export const DEMO_MODE =
+  process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_LEDGER_DEMO === "1";
 
 export const DEMO_USER = { email: "demo@cinderella.local", name: "示範帳號" } as const;

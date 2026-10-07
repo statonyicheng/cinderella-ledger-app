@@ -1,5 +1,6 @@
 import Image from "next/image";
 
+import { asset } from "@/config";
 import { cn } from "@/lib/utils";
 
 /**
@@ -12,7 +13,7 @@ export function BrandMark({ className }: { className?: string }) {
   return (
     <div className={cn("flex items-center gap-2.5", className)}>
       <Image
-        src="/brand/crest.png"
+        src={asset("/brand/crest.png")}
         alt=""
         width={420}
         height={336}

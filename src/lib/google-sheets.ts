@@ -1,30 +1,34 @@
-import "server-only";
-
-import { importPKCS8, SignJWT } from "jose";
-
-import { DEMO_MODE } from "@/lib/demo";
-import { env } from "@/lib/env";
-
 /**
- * Minimal Google Sheets v4 client over REST, authenticated as a service account.
+ * Minimal Google Sheets v4 client that runs in the browser with the signed-in user's own
+ * access token. There is no service account and no server: Google decides what this user may do,
+ * and only accounts the sheet is shared with as editors can write.
  *
- * The service-account JWT is signed with `jose` (already used for sessions), which avoids
- * pulling in the very large `googleapis` package for the handful of calls we need.
- *
- * All writes use `valueInputOption=RAW`: a customer name such as `=HYPERLINK(...)` is stored
- * as literal text and can never execute as a formula in the owner's spreadsheet.
+ * All writes use `valueInputOption=RAW`: a customer name such as `=HYPERLINK(...)` is stored as
+ * literal text and can never execute as a formula in the owner's spreadsheet.
  */
 
+import { config } from "@/config";
+import { DEMO_MODE } from "@/lib/demo";
+import { ensureToken } from "@/lib/google-auth";
+import { getUser } from "@/lib/session";
+
 const SHEETS_API = "https://sheets.googleapis.com/v4/spreadsheets";
-const TOKEN_URL = "https://oauth2.googleapis.com/token";
-const SCOPE = "https://www.googleapis.com/auth/spreadsheets";
 
 export type CellValue = string | number | boolean;
 export type Row = CellValue[];
 
+/** A Sheets failure explained in terms the salon staff can act on. */
+export class SheetError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
 /* ------------------------------------------------- demo (in-memory) backend */
 
-// Kept on globalThis so it survives dev-server hot reloads. Row 0 of each tab is the header.
 const memory = globalThis as unknown as { __ledgerDemoSheet?: Map<string, Row[]> };
 function demoSheet(): Map<string, Row[]> {
   return (memory.__ledgerDemoSheet ??= new Map<string, Row[]>());
@@ -57,51 +61,27 @@ const demo = {
 
 /* ------------------------------------------------------- Google backend */
 
-let cachedToken: { value: string; expiresAt: number } | null = null;
-
-async function accessToken(): Promise<string> {
-  if (cachedToken && cachedToken.expiresAt - 60_000 > Date.now()) return cachedToken.value;
-
-  const privateKey = await importPKCS8(env.serviceAccountPrivateKey, "RS256");
-  const assertion = await new SignJWT({ scope: SCOPE })
-    .setProtectedHeader({ alg: "RS256", typ: "JWT" })
-    .setIssuer(env.serviceAccountEmail)
-    .setAudience(TOKEN_URL)
-    .setIssuedAt()
-    .setExpirationTime("1h")
-    .sign(privateKey);
-
-  const res = await fetch(TOKEN_URL, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-      assertion,
-    }),
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    throw new Error(`Google token exchange failed (${res.status}): ${await res.text()}`);
-  }
-  const json = (await res.json()) as { access_token: string; expires_in: number };
-  cachedToken = { value: json.access_token, expiresAt: Date.now() + json.expires_in * 1000 };
-  return cachedToken.value;
-}
-
 async function sheetsFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${SHEETS_API}/${env.sheetId}${path}`, {
+  const user = getUser();
+  if (!user) throw new SheetError("請先登入", 401);
+  const token = await ensureToken(user.email);
+
+  const res = await fetch(`${SHEETS_API}/${config.sheetId}${path}`, {
     ...init,
-    headers: {
-      authorization: `Bearer ${await accessToken()}`,
-      "content-type": "application/json",
-      ...init?.headers,
-    },
-    cache: "no-store",
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json", ...init?.headers },
   });
-  if (!res.ok) {
-    throw new Error(`Google Sheets request failed (${res.status} ${path}): ${await res.text()}`);
+  if (res.ok) return (await res.json()) as T;
+
+  if (res.status === 401) throw new SheetError("登入已過期，請重新登入", 401);
+  if (res.status === 403) {
+    throw new SheetError(
+      `${user.email} 沒有「仙度瑞拉帳本」的編輯權限。請店長在試算表按「共用」，把你加為編輯者。`,
+      403,
+    );
   }
-  return (await res.json()) as T;
+  if (res.status === 404) throw new SheetError("找不到帳本試算表，請確認設定的試算表 ID", 404);
+  if (res.status === 429) throw new SheetError("Google 試算表暫時忙碌，請稍等幾秒再試", 429);
+  throw new SheetError(`Google 試算表發生錯誤（${res.status}）`, res.status);
 }
 
 /** Quote a tab name for A1 notation so Chinese names and spaces are safe. */
@@ -119,7 +99,7 @@ async function sheetIds(): Promise<Map<string, number>> {
 }
 
 /**
- * Create any missing tabs and give each a frozen header row. Runs once per server instance.
+ * Create any missing tabs with a frozen header row. Runs once per page load.
  * Existing tabs and their data are never touched.
  */
 let ensured: Promise<void> | null = null;
@@ -146,7 +126,7 @@ export function ensureTabs(schema: Record<string, readonly string[]>): Promise<v
       }),
     });
   })().catch((error) => {
-    ensured = null; // let the next request retry instead of caching the failure
+    ensured = null; // let the next attempt retry instead of caching the failure
     throw error;
   });
   return ensured;
@@ -164,10 +144,10 @@ export async function readRows(tab: string): Promise<Row[]> {
 export async function appendRows(tab: string, rows: Row[]): Promise<void> {
   if (rows.length === 0) return;
   if (DEMO_MODE) return demo.appendRows(tab, rows);
-  await sheetsFetch(
-    `/values/${a1(tab, "A1")}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
-    { method: "POST", body: JSON.stringify({ values: rows }) },
-  );
+  await sheetsFetch(`/values/${a1(tab, "A1")}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, {
+    method: "POST",
+    body: JSON.stringify({ values: rows }),
+  });
 }
 
 /** 1-based sheet row numbers (header is row 1) of every row whose column A equals `id`. */
@@ -205,16 +185,9 @@ export async function deleteRowsById(tab: string, id: string): Promise<number> {
       requests: numbers
         .sort((a, b) => b - a)
         .map((rowNumber) => ({
-          deleteDimension: {
-            range: { sheetId, dimension: "ROWS", startIndex: rowNumber - 1, endIndex: rowNumber },
-          },
+          deleteDimension: { range: { sheetId, dimension: "ROWS", startIndex: rowNumber - 1, endIndex: rowNumber } },
         })),
     }),
   });
   return numbers.length;
-}
-
-export function spreadsheetUrl() {
-  if (DEMO_MODE) return "https://docs.google.com/spreadsheets/";
-  return `https://docs.google.com/spreadsheets/d/${env.sheetId}/edit`;
 }

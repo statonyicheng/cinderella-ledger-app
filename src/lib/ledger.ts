@@ -1,5 +1,3 @@
-import "server-only";
-
 import {
   appendRows,
   deleteRowsById,
@@ -97,16 +95,22 @@ export interface Wish {
   status: string;
 }
 
-function ready() {
-  return ensureTabs(SCHEMA).then(seedDemo);
+/**
+ * Every read and write waits for this. In demo mode it also waits for the sample data, so a
+ * request that arrives while seeding is still running can't read a half-filled ledger.
+ */
+const seed = globalThis as unknown as { __ledgerDemoSeed?: Promise<void> };
+async function ready() {
+  await ensureTabs(SCHEMA);
+  if (DEMO_MODE) await (seed.__ledgerDemoSeed ??= seedDemo());
 }
 
-/** Demo mode only: a few made-up visits and expenses this month so every screen has content. */
-const seeded = globalThis as unknown as { __ledgerDemoSeeded?: boolean };
+/**
+ * Demo mode only: a few made-up visits and expenses this month so every screen has content.
+ * Writes rows directly rather than through createIncome/createExpense, which call ready() and
+ * would wait on this very promise.
+ */
 async function seedDemo() {
-  if (!DEMO_MODE || seeded.__ledgerDemoSeeded) return;
-  seeded.__ledgerDemoSeeded = true;
-
   const month = todayISO().slice(0, 7);
   const day = (d: number) => `${month}-${String(Math.min(d, Number(todayISO().slice(8)))).padStart(2, "0")}`;
   const visits: [number, string, string, [string, number, number][], number][] = [
@@ -117,7 +121,8 @@ async function seedDemo() {
     [5, "黃小姐", "LINE Pay", [["延甲", 2600, 320]], 200],
   ];
   for (const [d, customer, paymentMethod, items, discount] of visits) {
-    await createIncome(
+    const { main, items: itemRows } = incomeRows(
+      newId("IN"),
       {
         date: day(d),
         customer,
@@ -127,10 +132,16 @@ async function seedDemo() {
         items: items.map(([service, amount, cost]) => ({ service, amount, cost })),
       },
       DEMO_USER.email,
+      nowStamp(),
     );
+    await appendRows(TABS.income, [main]);
+    await appendRows(TABS.incomeItems, itemRows);
   }
-  await createExpense({ date: day(1), category: "店租", amount: 18000, note: "十月店租" }, DEMO_USER.email);
-  await createExpense({ date: day(2), category: "耗材", amount: 2350, note: "凝膠補貨 12 色" }, DEMO_USER.email);
+  const stamp = nowStamp();
+  await appendRows(TABS.expense, [
+    [newId("EX"), day(1), "店租", 18000, "十月店租", DEMO_USER.email, stamp, stamp],
+    [newId("EX"), day(2), "耗材", 2350, "凝膠補貨 12 色", DEMO_USER.email, stamp, stamp],
+  ]);
 }
 
 function newId(prefix: string) {

@@ -1,17 +1,10 @@
-import "server-only";
-
-import { jwtVerify, SignJWT } from "jose";
-import { cookies } from "next/headers";
-
-import { env } from "@/lib/env";
-
 /**
- * Stateless session: a signed JWT in an httpOnly cookie, following the Next.js 16
- * authentication guide (node_modules/next/dist/docs/01-app/02-guides/authentication.md).
+ * Browser-side session store: who is signed in, their Google access token, and a version
+ * counter that bumps whenever ledger data changes so views can reload.
+ *
+ * The access token lives in sessionStorage (cleared when the tab closes) and expires after an
+ * hour; Google issues it, and it only works for the sheets the user can already access.
  */
-
-export const SESSION_COOKIE = "session";
-const SESSION_DAYS = 7;
 
 export interface SessionUser {
   email: string;
@@ -19,46 +12,87 @@ export interface SessionUser {
   picture?: string;
 }
 
-function key() {
-  return new TextEncoder().encode(env.authSecret);
+interface StoredSession {
+  user: SessionUser;
+  token: string;
+  expiresAt: number;
 }
 
-export async function encryptSession(user: SessionUser): Promise<string> {
-  return new SignJWT({ ...user })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime(`${SESSION_DAYS}d`)
-    .sign(key());
+const KEY = "cinderella-ledger-session";
+
+let current: StoredSession | null = null;
+let dataVersion = 0;
+const listeners = new Set<() => void>();
+
+function emit() {
+  for (const listener of listeners) listener();
 }
 
-export async function decryptSession(token: string | undefined): Promise<SessionUser | null> {
-  if (!token) return null;
+function read(): StoredSession | null {
+  if (current) return current;
+  if (typeof window === "undefined") return null;
   try {
-    const { payload } = await jwtVerify(token, key(), { algorithms: ["HS256"] });
-    if (typeof payload.email !== "string" || typeof payload.name !== "string") return null;
-    return {
-      email: payload.email,
-      name: payload.name,
-      picture: typeof payload.picture === "string" ? payload.picture : undefined,
-    };
+    const raw = window.sessionStorage.getItem(KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StoredSession;
+    if (!parsed?.token || !parsed.user?.email) return null;
+    current = parsed;
+    return current;
   } catch {
     return null;
   }
 }
 
-export async function createSession(user: SessionUser) {
-  const token = await encryptSession(user);
-  const cookieStore = await cookies();
-  cookieStore.set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: SESSION_DAYS * 24 * 60 * 60,
-  });
+export function getUser(): SessionUser | null {
+  return read()?.user ?? null;
 }
 
-export async function deleteSession() {
-  const cookieStore = await cookies();
-  cookieStore.delete(SESSION_COOKIE);
+/** A token with at least a minute left, or null. */
+export function getToken(): string | null {
+  const s = read();
+  if (!s || s.expiresAt - 60_000 < Date.now()) return null;
+  return s.token;
+}
+
+export function setSession(user: SessionUser, token: string, expiresInSeconds: number) {
+  current = { user, token, expiresAt: Date.now() + expiresInSeconds * 1000 };
+  try {
+    window.sessionStorage.setItem(KEY, JSON.stringify(current));
+  } catch {
+    // Private mode etc. — the in-memory copy still works for this page.
+  }
+  emit();
+}
+
+/** Keep the user, replace an expired token. */
+export function refreshToken(token: string, expiresInSeconds: number) {
+  const s = read();
+  if (s) setSession(s.user, token, expiresInSeconds);
+}
+
+export function clearSession() {
+  current = null;
+  try {
+    window.sessionStorage.removeItem(KEY);
+  } catch {
+    // ignore
+  }
+  emit();
+}
+
+/** Tell every view that ledger data changed (after a write) so it reloads. */
+export function invalidate() {
+  dataVersion++;
+  emit();
+}
+
+export function getDataVersion() {
+  return dataVersion;
+}
+
+export function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
 }
