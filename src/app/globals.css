@@ -1,0 +1,200 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/*
+ * 仙度瑞拉 Cinderella — brand tokens
+ * Drawn from the CIS: the crest's ink line, the marble backdrop of the logo plate,
+ * the nude-pink almond nails and the champagne-gold foil in the signature photo.
+ */
+
+@theme {
+  --font-sans: var(--font-noto-sans-tc), "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+  --font-serif: var(--font-noto-serif-tc), "Songti TC", "PMingLiU", serif;
+  --font-script: var(--font-cormorant), "Times New Roman", serif;
+
+  /* Ink — the crest and wordmark */
+  --color-ink: #2b2320;
+  --color-ink-soft: #4a3f3b;
+  --color-ink-muted: #85796f;
+
+  /* Marble — the logo plate */
+  --color-marble: #f6f2ee;
+  --color-marble-deep: #ebe4de;
+  --color-veil: #fffdfb;
+  --color-line: #e3d9d2;
+  --color-line-strong: #cfc2b8;
+
+  /* Nude — the nail colour */
+  --color-nude-50: #fbf2ee;
+  --color-nude-100: #f5e1d8;
+  --color-nude-300: #e4b9a7;
+  --color-nude-500: #c98f7a;
+  --color-nude-700: #9a6553;
+
+  /* Champagne gold — the foil and pearls */
+  --color-gold-100: #f4ebdc;
+  --color-gold-300: #dcc49a;
+  --color-gold-500: #b8955a;
+  --color-gold-700: #8a6d3c;
+
+  --color-profit: #4f7a5a;
+  --color-profit-soft: #e9f1ea;
+  --color-loss: #a5524a;
+  --color-loss-soft: #f8e7e3;
+
+  --radius-card: 20px;
+  --shadow-card: 0 1px 2px rgb(43 35 32 / 0.04), 0 12px 32px rgb(43 35 32 / 0.06);
+  --shadow-float: 0 10px 40px rgb(43 35 32 / 0.16);
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    min-height: 100dvh;
+    background-color: var(--color-marble);
+    background-image:
+      radial-gradient(60rem 40rem at 110% -10%, rgb(228 185 167 / 0.28), transparent 60%),
+      radial-gradient(50rem 36rem at -20% 110%, rgb(220 196 154 / 0.22), transparent 60%);
+    background-attachment: fixed;
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-feature-settings: "palt";
+    line-height: 1.6;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-serif);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-gold-500);
+    outline-offset: 2px;
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    font: inherit;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  .card {
+    background: rgb(255 253 251 / 0.86);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+    backdrop-filter: blur(8px);
+  }
+
+  /* A fine gold rule — the crest's flourish reduced to a line */
+  .gold-rule {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--color-gold-300), transparent);
+  }
+
+  .field {
+    display: block;
+    width: 100%;
+    min-height: 46px;
+    padding: 10px 14px;
+    border: 1px solid var(--color-line);
+    border-radius: 12px;
+    background: #fff;
+    color: var(--color-ink);
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+  .field::placeholder {
+    color: #b3a79e;
+  }
+  .field:hover {
+    border-color: var(--color-line-strong);
+  }
+  .field:focus {
+    outline: none;
+    border-color: var(--color-gold-500);
+    box-shadow: 0 0 0 4px rgb(184 149 90 / 0.15);
+  }
+
+  .label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--color-ink-soft);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 44px;
+    padding: 10px 18px;
+    border-radius: 999px;
+    font-weight: 600;
+    white-space: nowrap;
+    transition:
+      transform 0.15s ease,
+      box-shadow 0.15s ease,
+      background-color 0.15s ease,
+      opacity 0.15s ease;
+  }
+  .btn:active {
+    transform: translateY(1px);
+  }
+  .btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+  .btn-primary {
+    background: var(--color-ink);
+    color: var(--color-gold-100);
+    box-shadow: 0 6px 18px rgb(43 35 32 / 0.18);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: var(--color-ink-soft);
+  }
+  .btn-outline {
+    border: 1px solid var(--color-line-strong);
+    background: var(--color-veil);
+    color: var(--color-ink);
+  }
+  .btn-outline:hover:not(:disabled) {
+    border-color: var(--color-gold-500);
+  }
+  .btn-ghost {
+    color: var(--color-ink-soft);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: var(--color-marble-deep);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
