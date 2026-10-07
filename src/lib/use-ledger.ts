@@ -26,7 +26,7 @@ function useDataVersion() {
 export interface LedgerData {
   income: IncomeRecord[];
   expenses: ExpenseRecord[];
-  lists: { services: string[]; paymentMethods: string[]; expenseCategories: string[] };
+  lists: { services: string[]; paymentMethods: string[]; expenseCategories: string[]; artists: string[] };
   shopName: string;
 }
 
@@ -74,14 +74,15 @@ function useSheetQuery<T>(load: (user: SessionUser) => Promise<T>): Loadable<T> 
 async function loadLedger(): Promise<LedgerData> {
   // Sequential on purpose: the first call creates any missing tabs and seeds the pick-lists.
   const services = await getPickList("services");
-  const [income, expenses, paymentMethods, expenseCategories, shopName] = await Promise.all([
+  const [income, expenses, paymentMethods, expenseCategories, artists, shopName] = await Promise.all([
     listIncome(),
     listExpenses(),
     getPickList("paymentMethods"),
     getPickList("expenseCategories"),
+    getPickList("artists"),
     getShopName(),
   ]);
-  return { income, expenses, lists: { services, paymentMethods, expenseCategories }, shopName };
+  return { income, expenses, lists: { services, paymentMethods, expenseCategories, artists }, shopName };
 }
 
 export function useLedger() {

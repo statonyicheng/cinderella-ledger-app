@@ -57,6 +57,10 @@ export function SettingsView() {
           </div>
         </Section>
 
+        <Section title="美甲師" description="記收入時要選是哪位美甲師服務的，報表會依此算分潤。">
+          <PickListEditor list="artists" items={lists.artists} placeholder="新增美甲師姓名" />
+        </Section>
+
         <Section title="服務項目" description="記收入時可選的項目。">
           <PickListEditor list="services" items={lists.services} placeholder="新增服務項目" />
         </Section>

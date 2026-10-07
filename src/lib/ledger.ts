@@ -16,7 +16,7 @@ import { monthOf, nowStamp, todayISO } from "@/lib/format";
  *   收入      one row per visit (the reconciliation view)
  *   收入明細  one row per service line, keyed by 收入ID (feeds the service ranking)
  *   成本      one row per expense
- *   服務項目 / 付款方式 / 成本類型   editable pick-lists
+ *   服務項目 / 付款方式 / 成本類型 / 美甲師   editable pick-lists
  *   工作室設定  key/value settings
  */
 
@@ -27,27 +27,32 @@ export const TABS = {
   services: "服務項目",
   paymentMethods: "付款方式",
   expenseCategories: "成本類型",
+  artists: "美甲師",
   settings: "工作室設定",
 } as const;
 
 const SCHEMA: Record<string, readonly string[]> = {
-  [TABS.income]: ["ID", "日期", "客戶姓名", "付款方式", "服務項目", "實收金額", "服務成本", "促銷折扣", "備註", "建立者", "建立時間", "更新時間"],
+  [TABS.income]: ["ID", "日期", "客戶姓名", "付款方式", "服務項目", "實收金額", "服務成本", "促銷折扣", "備註", "建立者", "建立時間", "更新時間", "美甲師"],
   [TABS.incomeItems]: ["收入ID", "日期", "服務項目", "實收金額", "服務成本"],
   [TABS.expense]: ["ID", "日期", "成本類型", "金額", "備註", "建立者", "建立時間", "更新時間"],
   [TABS.services]: ["名稱"],
   [TABS.paymentMethods]: ["名稱"],
   [TABS.expenseCategories]: ["名稱"],
+  [TABS.artists]: ["名稱"],
   [TABS.settings]: ["鍵", "值"],
 };
 
-/** Seeded once, the first time a pick-list tab is found empty. Fully editable in 設定. */
+/**
+ * Seeded once, the first time a pick-list tab is found empty. Fully editable in 設定.
+ * 美甲師 has no defaults: the owner adds the real names.
+ */
 const DEFAULT_LISTS: Record<string, string[]> = {
   [TABS.services]: ["單色凝膠", "漸層", "法式", "造型設計", "延甲", "卸甲", "保養", "飾品加購"],
   [TABS.paymentMethods]: ["現金", "轉帳", "刷卡", "LINE Pay", "其他"],
   [TABS.expenseCategories]: ["耗材", "工具設備", "店租", "水電", "行銷廣告", "教育進修", "平台手續費", "其他"],
 };
 
-export type PickList = "services" | "paymentMethods" | "expenseCategories";
+export type PickList = "services" | "paymentMethods" | "expenseCategories" | "artists";
 
 export interface IncomeItem {
   service: string;
@@ -60,6 +65,8 @@ export interface IncomeRecord {
   id: string;
   date: string;
   customer: string;
+  /** The nail artist who served this visit; the basis for profit sharing. */
+  artist: string;
   paymentMethod: string;
   items: IncomeItem[];
   amount: number;
@@ -101,19 +108,21 @@ async function ready() {
 async function seedDemo() {
   const month = todayISO().slice(0, 7);
   const day = (d: number) => `${month}-${String(Math.min(d, Number(todayISO().slice(8)))).padStart(2, "0")}`;
-  const visits: [number, string, string, [string, number, number][], number][] = [
-    [1, "林小姐", "LINE Pay", [["單色凝膠", 1200, 120]], 0],
-    [2, "陳小姐", "現金", [["法式", 1500, 150], ["飾品加購", 300, 60]], 100],
-    [3, "王小姐", "刷卡", [["造型設計", 2200, 260]], 0],
-    [3, "張小姐", "轉帳", [["卸甲", 300, 20], ["漸層", 1400, 140]], 0],
-    [5, "黃小姐", "LINE Pay", [["延甲", 2600, 320]], 200],
+  await appendRows(TABS.artists, [["小芸"], ["Mia"]]);
+  const visits: [number, string, string, string, [string, number, number][], number][] = [
+    [1, "林小姐", "小芸", "LINE Pay", [["單色凝膠", 1200, 120]], 0],
+    [2, "陳小姐", "Mia", "現金", [["法式", 1500, 150], ["飾品加購", 300, 60]], 100],
+    [3, "王小姐", "小芸", "刷卡", [["造型設計", 2200, 260]], 0],
+    [3, "張小姐", "Mia", "轉帳", [["卸甲", 300, 20], ["漸層", 1400, 140]], 0],
+    [5, "黃小姐", "小芸", "LINE Pay", [["延甲", 2600, 320]], 200],
   ];
-  for (const [d, customer, paymentMethod, items, discount] of visits) {
+  for (const [d, customer, artist, paymentMethod, items, discount] of visits) {
     const { main, items: itemRows } = incomeRows(
       newId("IN"),
       {
         date: day(d),
         customer,
+        artist,
         paymentMethod,
         discount,
         note: "",
@@ -162,6 +171,7 @@ export async function listIncome(): Promise<IncomeRecord[]> {
       id: str(r[0]),
       date: str(r[1]),
       customer: str(r[2]),
+      artist: str(r[12]),
       paymentMethod: str(r[3]),
       items: itemsById.get(str(r[0])) ?? [],
       amount: num(r[5]),
@@ -241,6 +251,7 @@ export async function getShopName(): Promise<string> {
 export interface IncomeInput {
   date: string;
   customer: string;
+  artist: string;
   paymentMethod: string;
   items: IncomeItem[];
   discount: number;
@@ -264,6 +275,7 @@ function incomeRows(id: string, input: IncomeInput, createdBy: string, createdAt
       createdBy,
       createdAt,
       nowStamp(),
+      input.artist,
     ],
     items: input.items.map((i) => [id, input.date, i.service, i.amount, i.cost]),
   };
@@ -408,6 +420,24 @@ export function paymentBreakdown(income: IncomeRecord[]) {
     entry.count += 1;
     entry.amount += record.amount;
     map.set(method, entry);
+  }
+  return [...map.values()].sort((a, b) => b.amount - a.amount);
+}
+
+/**
+ * Per-artist totals for profit sharing. 毛利 is what the artist's customers paid minus the
+ * materials recorded on those visits; shop expenses are not split across artists.
+ */
+export function artistBreakdown(income: IncomeRecord[]) {
+  const map = new Map<string, { artist: string; visits: number; amount: number; cost: number; gross: number }>();
+  for (const record of income) {
+    const artist = record.artist || "未指定";
+    const entry = map.get(artist) ?? { artist, visits: 0, amount: 0, cost: 0, gross: 0 };
+    entry.visits += 1;
+    entry.amount += record.amount;
+    entry.cost += record.cost;
+    entry.gross = entry.amount - entry.cost;
+    map.set(artist, entry);
   }
   return [...map.values()].sort((a, b) => b.amount - a.amount);
 }

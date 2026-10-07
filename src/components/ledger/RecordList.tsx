@@ -30,7 +30,7 @@ export function RecordList({
           ? record.items.map((i) => i.service).join("、") || "收入"
           : record.category;
         const sub = income
-          ? [record.customer, record.paymentMethod].filter(Boolean).join(" · ")
+          ? [record.customer, record.artist, record.paymentMethod].filter(Boolean).join(" · ")
           : record.note;
 
         return (

@@ -41,6 +41,7 @@ const text = (max: number) => z.string().trim().max(max, `最多 ${max} 個字`)
 const incomeSchema = z.object({
   date,
   customer: text(60),
+  artist: text(40),
   paymentMethod: text(40),
   discount: money,
   note: text(500),
@@ -101,6 +102,7 @@ export async function saveIncome(_prev: ActionState, formData: FormData): Promis
   const parsed = incomeSchema.safeParse({
     date: formData.get("date"),
     customer: formData.get("customer") ?? "",
+    artist: formData.get("artist") ?? "",
     paymentMethod: formData.get("paymentMethod") ?? "",
     discount: formData.get("discount") || 0,
     note: formData.get("note") ?? "",
@@ -138,7 +140,7 @@ export async function removeRecord(kind: "income" | "expense", id: string): Prom
   return guard(() => deleteRecord(kind, id), "已刪除");
 }
 
-const pickLists = ["services", "paymentMethods", "expenseCategories"] as const;
+const pickLists = ["services", "paymentMethods", "expenseCategories", "artists"] as const;
 
 export async function addListItem(_prev: ActionState, formData: FormData): Promise<ActionState> {
   if (!currentEmail()) return NOT_SIGNED_IN;

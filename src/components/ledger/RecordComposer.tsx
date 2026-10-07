@@ -11,6 +11,7 @@ export interface PickLists {
   services: string[];
   paymentMethods: string[];
   expenseCategories: string[];
+  artists: string[];
 }
 
 type Kind = "income" | "expense";
@@ -194,34 +195,55 @@ function IncomeForm({
         </label>
       </div>
 
-      <label className="block">
-        <span className="label">客人</span>
-        <input
-          name="customer"
-          maxLength={60}
-          defaultValue={record?.customer}
-          placeholder="姓名或暱稱（可留空）"
-          className="field"
-          autoComplete="off"
-        />
-      </label>
+      <div className="grid grid-cols-2 gap-3">
+        <label className="block">
+          <span className="label">客人</span>
+          <input
+            name="customer"
+            maxLength={60}
+            defaultValue={record?.customer}
+            placeholder="可留空"
+            className="field"
+            autoComplete="off"
+          />
+        </label>
+        <label className="block">
+          <span className="label">美甲師</span>
+          {/* Required once the shop has listed its artists: every visit needs one for profit sharing. */}
+          <select
+            name="artist"
+            required={lists.artists.length > 0}
+            defaultValue={record?.artist ?? ""}
+            className="field"
+          >
+            <option value="" disabled={lists.artists.length > 0}>
+              {lists.artists.length > 0 ? "請選擇" : "請先到設定新增"}
+            </option>
+            <Options values={lists.artists} current={record?.artist} />
+          </select>
+        </label>
+      </div>
 
       <fieldset className="grid gap-2.5 rounded-2xl border border-line bg-marble/60 p-3">
         <legend className="label px-1">服務項目</legend>
-        <div className="grid grid-cols-[1fr_5.5rem_5.5rem_2.25rem] gap-2 px-1 text-xs text-ink-muted">
+        <div className="hidden grid-cols-[1fr_5.5rem_5.5rem_2.25rem] gap-2 px-1 text-xs text-ink-muted sm:grid">
           <span>項目</span>
           <span>實收</span>
           <span>耗材成本</span>
           <span />
         </div>
         {items.map((item, index) => (
-          <div key={item.key} className="grid grid-cols-[1fr_5.5rem_5.5rem_2.25rem] items-center gap-2">
+          // Phones: the service gets its own line, the two amounts sit below it.
+          <div
+            key={item.key}
+            className="grid grid-cols-[1fr_1fr_2.25rem] items-center gap-2 sm:grid-cols-[1fr_5.5rem_5.5rem_2.25rem]"
+          >
             <select
               name={`items.${index}.service`}
               required
               defaultValue={item.service}
               aria-label={`第 ${index + 1} 項服務`}
-              className="field min-h-11 px-2.5"
+              className="field col-span-3 min-h-11 min-w-0 px-2.5 sm:col-span-1"
             >
               <option value="" disabled>
                 請選擇
@@ -239,6 +261,7 @@ function IncomeForm({
               onChange={(e) =>
                 setItems((all) => all.map((it) => (it.key === item.key ? { ...it, amount: Number(e.target.value) } : it)))
               }
+              placeholder="實收"
               aria-label={`第 ${index + 1} 項實收金額`}
               className="field tabular min-h-11 px-2.5"
             />
@@ -249,6 +272,7 @@ function IncomeForm({
               min={0}
               step={1}
               defaultValue={item.cost || ""}
+              placeholder="耗材成本"
               aria-label={`第 ${index + 1} 項耗材成本`}
               className="field tabular min-h-11 px-2.5"
             />

@@ -23,7 +23,7 @@ function matches(record: LedgerRecord, f: Filters) {
   if (f.q) {
     const haystack =
       record.kind === "income"
-        ? [record.customer, record.paymentMethod, record.note, ...record.items.map((i) => i.service)]
+        ? [record.customer, record.artist, record.paymentMethod, record.note, ...record.items.map((i) => i.service)]
         : [record.category, record.note];
     if (!haystack.join(" ").toLowerCase().includes(f.q.toLowerCase())) return false;
   }

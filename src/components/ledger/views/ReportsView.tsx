@@ -6,7 +6,7 @@ import { LoadState } from "@/components/ledger/AppShell";
 import { PageHeader } from "@/components/ledger/PageHeader";
 import { SummaryCards } from "@/components/ledger/SummaryCards";
 import { formatMonthLabel, formatNTD, isISOMonth, monthOf, todayISO } from "@/lib/format";
-import { inMonth, paymentBreakdown, serviceRanking, summarize } from "@/lib/ledger";
+import { artistBreakdown, inMonth, paymentBreakdown, serviceRanking, summarize } from "@/lib/ledger";
 import { useLedger } from "@/lib/use-ledger";
 
 function Bar({ value, max }: { value: number; max: number }) {
@@ -31,6 +31,7 @@ export function ReportsView() {
   const s = summarize(income, expenses);
   const ranking = serviceRanking(income);
   const payments = paymentBreakdown(income);
+  const artists = artistBreakdown(income);
   const expenseByCategory = [...expenses.reduce((m, r) => m.set(r.category, (m.get(r.category) ?? 0) + r.amount), new Map<string, number>())]
     .sort((a, b) => b[1] - a[1]);
 
@@ -71,6 +72,45 @@ export function ReportsView() {
               <p className="tabular mt-1 font-serif text-lg font-semibold text-ink">{stat.value}</p>
             </div>
           ))}
+        </section>
+
+        <section className="card p-4 md:p-6" aria-labelledby="artist-title">
+          <h2 id="artist-title" className="text-lg">
+            美甲師業績
+          </h2>
+          <p className="mt-0.5 mb-4 text-xs text-ink-muted">分潤參考：毛利 = 實收 − 該美甲師服務的耗材成本，不含店租等營運支出。</p>
+          {artists.length === 0 ? (
+            <p className="py-6 text-center text-sm text-ink-muted">本月還沒有收入紀錄。</p>
+          ) : (
+            <ul className="grid gap-4 md:grid-cols-2 md:gap-x-8">
+              {artists.map((a) => (
+                <li key={a.artist} className="grid gap-2">
+                  <div className="flex items-baseline justify-between gap-3 text-sm">
+                    <span className="font-medium">
+                      {a.artist}
+                      <span className="ml-1.5 text-xs font-normal text-ink-muted">{a.visits} 位客人</span>
+                    </span>
+                    <span className="tabular font-medium">{formatNTD(a.amount)}</span>
+                  </div>
+                  <Bar value={a.amount} max={artists[0].amount} />
+                  <dl className="grid grid-cols-3 gap-2 text-xs">
+                    <div>
+                      <dt className="text-ink-muted">實收</dt>
+                      <dd className="tabular">{formatNTD(a.amount)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-ink-muted">耗材成本</dt>
+                      <dd className="tabular">{formatNTD(a.cost)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-ink-muted">毛利</dt>
+                      <dd className="tabular font-medium">{formatNTD(a.gross)}</dd>
+                    </div>
+                  </dl>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
 
         <div className="grid gap-4 md:grid-cols-2 md:gap-5">

@@ -98,9 +98,35 @@ async function sheetIds(): Promise<Map<string, number>> {
   return new Map(meta.sheets.map((s) => [s.properties.title, s.properties.sheetId]));
 }
 
+/** 0 → A, 12 → M. Schemas stay well under 26 columns. */
+const columnLetter = (index: number) => String.fromCharCode(65 + index);
+
 /**
- * Create any missing tabs with a frozen header row. Runs once per page load.
- * Existing tabs and their data are never touched.
+ * Columns added to a schema later go at the end. When an older tab's header is exactly the start
+ * of the current schema, write the new header cells; data rows are left as they are (blank in
+ * the new columns). A header the owner has edited by hand is left alone.
+ */
+async function extendHeaders(schema: Record<string, readonly string[]>, tabs: string[]) {
+  if (tabs.length === 0) return;
+  const query = tabs.map((tab) => `ranges=${a1(tab, "1:1")}`).join("&");
+  const data = await sheetsFetch<{ valueRanges: { values?: Row[] }[] }>(`/values:batchGet?${query}`);
+  const updates = tabs.flatMap((tab, i) => {
+    const header = (data.valueRanges[i]?.values?.[0] ?? []).map(String);
+    const wanted = schema[tab];
+    const isPrefix = header.length > 0 && header.every((cell, c) => cell === wanted[c]);
+    if (!isPrefix || header.length >= wanted.length) return [];
+    return [{ range: `'${tab}'!${columnLetter(header.length)}1`, values: [wanted.slice(header.length)] }];
+  });
+  if (updates.length === 0) return;
+  await sheetsFetch("/values:batchUpdate", {
+    method: "POST",
+    body: JSON.stringify({ valueInputOption: "RAW", data: updates }),
+  });
+}
+
+/**
+ * Create any missing tabs with a frozen header row, and add header cells for columns introduced
+ * since a tab was created. Runs once per page load. Existing data is never touched.
  */
 let ensured: Promise<void> | null = null;
 export function ensureTabs(schema: Record<string, readonly string[]>): Promise<void> {
@@ -108,6 +134,7 @@ export function ensureTabs(schema: Record<string, readonly string[]>): Promise<v
   ensured ??= (async () => {
     const existing = await sheetIds();
     const missing = Object.keys(schema).filter((tab) => !existing.has(tab));
+    await extendHeaders(schema, Object.keys(schema).filter((tab) => existing.has(tab)));
     if (missing.length === 0) return;
 
     await sheetsFetch(":batchUpdate", {
