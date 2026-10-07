@@ -214,14 +214,32 @@ export async function listAllRecords(): Promise<LedgerRecord[]> {
   return sortRecords<LedgerRecord>([...income, ...expenses]);
 }
 
+/**
+ * Seeds in flight or done, per tab. Several views can read an empty tab at the same moment (the
+ * first visit is slow because the tabs are being created); they must share one seed, or each one
+ * appends the defaults again.
+ */
+const seeding = new Map<string, Promise<string[]>>();
+
 export async function getPickList(list: PickList): Promise<string[]> {
   await ready();
   const tab = TABS[list];
   const values = (await readRows(tab)).map((r) => str(r[0]).trim()).filter(Boolean);
-  if (values.length > 0) return values;
-  const defaults = DEFAULT_LISTS[tab] ?? [];
-  await appendRows(tab, defaults.map((name) => [name]));
-  return defaults;
+  // Duplicates can still come from the sheet itself (typed by hand, or two phones seeding at once).
+  if (values.length > 0) return [...new Set(values)];
+
+  let seeded = seeding.get(tab);
+  if (!seeded) {
+    const defaults = DEFAULT_LISTS[tab] ?? [];
+    seeded = appendRows(tab, defaults.map((name) => [name]))
+      .then(() => defaults)
+      .catch((error: unknown) => {
+        seeding.delete(tab);
+        throw error;
+      });
+    seeding.set(tab, seeded);
+  }
+  return seeded;
 }
 
 export async function getShopName(): Promise<string> {
