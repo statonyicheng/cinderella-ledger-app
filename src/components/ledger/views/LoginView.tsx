@@ -77,9 +77,13 @@ export function LoginView() {
               className="mx-auto size-36 drop-shadow-[0_8px_20px_rgb(43_35_32/0.12)] md:size-44"
             />
             <div className="gold-rule mx-auto my-6 w-2/3" />
-            <h1 className="text-xl">店內記帳</h1>
-            <p className="mx-auto mt-2 max-w-72 text-sm leading-relaxed text-ink-muted">
-              每一筆收入與成本都會即時寫進店裡的 Google 試算表，月底直接對帳。
+            <p className="font-script text-lg text-gold-700 italic">The Atelier Ledger</p>
+            <h1 className="mt-1 text-xl tracking-[0.2em]">店務帳本</h1>
+            {/* Broken by phrase, not by width: a wrapped line that leaves one character behind reads poorly. */}
+            <p className="mx-auto mt-3 text-sm leading-relaxed text-ink-muted">
+              <span className="block">為指尖上的每一份光澤，記下背後的用心。</span>
+              <span className="mt-1 block">收入與成本即時收進店內帳本，</span>
+              <span className="block">對帳從容，一如我們對待每件作品。</span>
             </p>
 
             {message ? (
@@ -97,7 +101,7 @@ export function LoginView() {
               <GoogleLogo />
               {pending ? "正在開啟 Google…" : "使用 Google 帳號登入"}
             </button>
-            <p className="mt-4 text-xs text-ink-muted">僅限店內授權的 Gmail 帳號</p>
+            <p className="mt-4 text-xs text-ink-muted">僅限仙度瑞拉授權成員登入</p>
           </div>
         </div>
       </div>
