@@ -1,13 +1,14 @@
 "use client";
 
+import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 
 import { LoadState } from "@/components/ledger/AppShell";
 import { AtelierGallery } from "@/components/ledger/AtelierGallery";
-import { PageHeader } from "@/components/ledger/PageHeader";
 import { SummaryCards } from "@/components/ledger/SummaryCards";
 import { formatMonthLabel, formatNTD, isISOMonth, monthOf, todayISO } from "@/lib/format";
 import { artistBreakdown, inMonth, paymentBreakdown, serviceRanking, summarize } from "@/lib/ledger";
+import { asset } from "@/config";
 import { useLedger } from "@/lib/use-ledger";
 
 function Bar({ value, max }: { value: number; max: number }) {
@@ -47,21 +48,42 @@ export function ReportsView() {
 
   return (
     <>
-      <PageHeader
-        title={`${formatMonthLabel(month)}報表`}
-        description="淨利 = 實收 − 服務耗材 − 營運支出。沒記錄的成本不會被估算進來。"
-        action={
-          <form method="get" className="flex items-center gap-2">
+      {/* The page title sits on one of the salon's own designs, fading into the page from the left
+          so the text always reads on a calm surface. */}
+      <header className="relative mb-5 overflow-hidden rounded-[var(--radius-card)] border border-line bg-veil shadow-[var(--shadow-card)]">
+        {/* Desktop: the photo's own left edge fades out (mask), so there is no seam to see. Phones: the
+            photo spans the card under a veil that keeps the title legible. */}
+        <div className="absolute inset-0 md:left-auto md:w-[64%] md:[mask-image:linear-gradient(to_right,transparent,black_42%)]">
+          <Image
+            src={asset("/gallery/report-banner.webp")}
+            alt=""
+            fill
+            priority
+            sizes="(min-width: 768px) 760px, 100vw"
+            className="object-cover object-[60%_50%]"
+          />
+          <div className="absolute inset-0 bg-linear-to-r from-veil via-veil/85 to-veil/35 md:hidden" />
+        </div>
+        <div className="relative px-5 py-6 md:px-8 md:py-9">
+          <p className="font-script text-lg text-gold-700 italic">Monthly Review</p>
+          <h1 className="mt-0.5 text-2xl text-ink md:text-[1.9rem]">{formatMonthLabel(month)}報表</h1>
+          <div className="gold-rule mt-3 w-24" />
+          <p className="mt-3 max-w-[22rem] text-sm leading-relaxed text-ink-soft">
+            淨利 = 實收 − 服務耗材 − 營運支出。
+            <br />
+            沒記錄的成本不會被估算進來。
+          </p>
+          <form method="get" className="mt-5 flex items-center gap-2">
             <label className="sr-only" htmlFor="month">
               報表月份
             </label>
-            <input id="month" type="month" name="month" defaultValue={month} className="field min-h-10 w-40" />
-            <button type="submit" className="btn btn-outline min-h-10 px-4">
+            <input id="month" type="month" name="month" defaultValue={month} className="field min-h-10 w-40 bg-white/90" />
+            <button type="submit" className="btn btn-outline min-h-10 bg-white/90 px-4">
               查看
             </button>
           </form>
-        }
-      />
+        </div>
+      </header>
 
       <div className="grid gap-4 md:gap-5">
         <SummaryCards summary={s} />

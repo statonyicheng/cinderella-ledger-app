@@ -6,8 +6,8 @@
 //   ink-french.jpg    nude gradient with ink French lines (1125×632)
 //   tartan-gold.jpg   tartan with gold foil (1125×632)
 //
-// Output: public/gallery/<name>.webp, square, 640px. Crops are in source pixels; re-measure them if a
-// source photo is replaced.
+// Output: public/gallery/<name>.webp — square 640px gallery tiles, plus the wide banner behind the
+// 報表 page title. Crops are in source pixels; re-measure them if a source photo is replaced.
 import { mkdirSync } from "node:fs";
 import sharp from "sharp";
 
@@ -23,6 +23,7 @@ const PHOTOS = [
   { name: "berry-tartan", file: "collage.jpg", crop: { left: 558, top: 991, width: 550, height: 487 } },
   { name: "ink-french", file: "ink-french.jpg" },
   { name: "tartan-gold", file: "tartan-gold.jpg" },
+  { name: "report-banner", file: "ink-french.jpg", width: 1200, height: 520 },
 ];
 
 mkdirSync(OUT, { recursive: true });
@@ -30,7 +31,7 @@ for (const photo of PHOTOS) {
   let image = sharp(`${SRC}/${photo.file}`);
   if (photo.crop) image = image.extract(photo.crop);
   await image
-    .resize(SIZE, SIZE, { fit: "cover", position: sharp.strategy.attention })
+    .resize(photo.width ?? SIZE, photo.height ?? SIZE, { fit: "cover", position: sharp.strategy.attention })
     .webp({ quality: 78 })
     .toFile(`${OUT}/${photo.name}.webp`);
   console.log(`${OUT}/${photo.name}.webp`);
