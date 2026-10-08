@@ -2,10 +2,11 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 import { asset, isAllowed } from "@/config";
 import { preloadGoogleSignIn, signIn, SignInError } from "@/lib/google-auth";
+import { detectInAppBrowser, type InAppBrowser, lineExternalUrl } from "@/lib/in-app-browser";
 import { useSessionUser } from "@/lib/use-ledger";
 
 function GoogleLogo() {
@@ -16,6 +17,45 @@ function GoogleLogo() {
       <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z" />
       <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z" />
     </svg>
+  );
+}
+
+const noSubscribe = () => () => {};
+
+function useInAppBrowser(): InAppBrowser {
+  return useSyncExternalStore(noSubscribe, () => detectInAppBrowser(navigator.userAgent), () => null);
+}
+
+/** Shown instead of the Google button inside LINE / Instagram / Facebook, where Google sign-in can't work. */
+function OpenInBrowser({ app }: { app: Exclude<InAppBrowser, null> }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href.replace(/[?&]openExternalBrowser=1/, ""));
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  return (
+    <div className="mx-auto mt-7 grid max-w-80 gap-3 text-left">
+      <div className="rounded-xl bg-gold-100/60 px-4 py-3 text-sm leading-relaxed text-ink-soft">
+        <p className="font-medium text-ink">請改用 Safari 或 Chrome 開啟</p>
+        <p className="mt-1">
+          Google 不允許在 {app === "line" ? "LINE" : "App"} 內建的瀏覽器登入。
+          {app === "line" ? "" : "請點右上角「⋯」，選「在瀏覽器中開啟」。"}
+        </p>
+      </div>
+      {app === "line" ? (
+        <a href={lineExternalUrl(window.location.href)} className="btn btn-primary w-full">
+          用瀏覽器開啟
+        </a>
+      ) : null}
+      <button type="button" onClick={copy} className="btn btn-outline w-full bg-white">
+        {copied ? "已複製，貼到 Safari 或 Chrome 即可" : "複製網址"}
+      </button>
+    </div>
   );
 }
 
@@ -34,6 +74,14 @@ export function LoginView() {
   }, [user, router]);
 
   useEffect(preloadGoogleSignIn, []);
+
+  // LINE: hop straight to the phone's real browser. The flag stops a loop if LINE ignores it.
+  const inApp = useInAppBrowser();
+  useEffect(() => {
+    if (inApp === "line" && !window.location.search.includes("openExternalBrowser=1")) {
+      window.location.replace(lineExternalUrl(window.location.href));
+    }
+  }, [inApp]);
 
   async function handleSignIn() {
     setPending(true);
@@ -92,15 +140,19 @@ export function LoginView() {
               </p>
             ) : null}
 
-            <button
-              type="button"
-              onClick={handleSignIn}
-              disabled={pending}
-              className="btn btn-outline mt-7 w-full max-w-80 gap-3 bg-white"
-            >
-              <GoogleLogo />
-              {pending ? "正在開啟 Google…" : "使用 Google 帳號登入"}
-            </button>
+            {inApp ? (
+              <OpenInBrowser app={inApp} />
+            ) : (
+              <button
+                type="button"
+                onClick={handleSignIn}
+                disabled={pending}
+                className="btn btn-outline mt-7 w-full max-w-80 gap-3 bg-white"
+              >
+                <GoogleLogo />
+                {pending ? "正在開啟 Google…" : "使用 Google 帳號登入"}
+              </button>
+            )}
             <p className="mt-4 text-xs text-ink-muted">僅限仙度瑞拉授權成員登入</p>
           </div>
         </div>
