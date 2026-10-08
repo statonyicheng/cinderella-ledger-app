@@ -3,6 +3,7 @@
 import { useSearchParams } from "next/navigation";
 
 import { LoadState } from "@/components/ledger/AppShell";
+import { AtelierGallery } from "@/components/ledger/AtelierGallery";
 import { PageHeader } from "@/components/ledger/PageHeader";
 import { SummaryCards } from "@/components/ledger/SummaryCards";
 import { formatMonthLabel, formatNTD, isISOMonth, monthOf, todayISO } from "@/lib/format";
@@ -184,6 +185,8 @@ export function ReportsView() {
             </ul>
           )}
         </section>
+
+        <AtelierGallery />
       </div>
     </>
   );

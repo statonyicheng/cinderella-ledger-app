@@ -130,6 +130,7 @@ npm run check       # lint + 型別檢查 + build（輸出到 out/）
 | `public/brand/logo-plate.webp` | 登入頁 | 完整 logo 沿圓盤裁成圓形，去掉外圍大理石方角 |
 | `public/brand/nails.webp` | 登入頁照片 | 作品照轉 WebP |
 | `src/app/icon.png`、`apple-icon.png` | 瀏覽器分頁圖示、手機主畫面圖示 | 徽章放在圓盤底色上 |
+| `public/gallery/*.webp` | 報表頁底部「作品選集」 | 從官網作品照裁成正方形，原始檔在 `brand-source/gallery/`，執行 `node scripts/gallery-assets.mjs` 重新產生 |
 
 頁首的「仙度瑞拉 / Cinderella」是用字型排的，不是從 logo 裁的：logo 裡的字縮到頁首大小會糊掉。
 
