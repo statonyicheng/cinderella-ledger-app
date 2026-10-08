@@ -4,6 +4,7 @@ import { Minus, Pencil, Plus, X } from "lucide-react";
 import { useActionState, useEffect, useId, useRef, useState } from "react";
 
 import { type ActionState, saveExpense, saveIncome } from "@/lib/actions";
+import { clearDraft, type DraftValues, readDraft, saveDraft } from "@/lib/drafts";
 import type { ExpenseRecord, IncomeItem, IncomeRecord } from "@/lib/ledger";
 import { cn } from "@/lib/utils";
 
@@ -39,9 +40,16 @@ export function RecordComposer({
   const titleId = useId();
 
   const open = () => {
+    // Reopen on the tab whose unsent draft is waiting, if only one of them has one.
+    if (!editing) {
+      if (readDraft("new-expense") && !readDraft("new-income")) setKind("expense");
+      else if (readDraft("new-income") && !readDraft("new-expense")) setKind("income");
+    }
     setFormKey((k) => k + 1);
     dialogRef.current?.showModal();
   };
+  // 清除重填: the form remounts and, with its draft gone, starts from the defaults.
+  const reset = () => setFormKey((k) => k + 1);
   const close = () => dialogRef.current?.close();
 
   return (
@@ -101,7 +109,9 @@ export function RecordComposer({
               lists={lists}
               defaultDate={defaultDate}
               record={editing?.kind === "income" ? editing : undefined}
+              slot={editing ? `edit-${editing.id}` : "new-income"}
               onDone={close}
+              onReset={reset}
             />
           ) : (
             <ExpenseForm
@@ -109,7 +119,9 @@ export function RecordComposer({
               lists={lists}
               defaultDate={defaultDate}
               record={editing?.kind === "expense" ? editing : undefined}
+              slot={editing ? `edit-${editing.id}` : "new-expense"}
               onDone={close}
+              onReset={reset}
             />
           )}
         </div>
@@ -124,6 +136,72 @@ function useCloseOnSuccess(state: ActionState, onDone: () => void) {
     if (state !== handled.current && state.ok) onDone();
     handled.current = state;
   }, [state, onDone]);
+}
+
+/**
+ * Keep the form's contents in a draft as the user types, so closing the dialog or reloading the
+ * page loses nothing. The draft is read once when the form mounts and removed after a successful
+ * save. Nothing is stored until the user actually changes something.
+ */
+function useDraft(slot: string, state: ActionState) {
+  const [draft] = useState<DraftValues | null>(() => readDraft(slot));
+  const formRef = useRef<HTMLFormElement>(null);
+  // A restored draft counts as changed: removing a row from it must be saved too.
+  const dirty = useRef(draft !== null);
+
+  const persist = () => {
+    dirty.current = true;
+    if (formRef.current) saveDraft(slot, formRef.current);
+  };
+  // For changes that fire no input event (removing a service row): save after the DOM updates.
+  const persistIfDirty = () => {
+    if (dirty.current && formRef.current) saveDraft(slot, formRef.current);
+  };
+
+  useEffect(() => {
+    if (state.ok) {
+      clearDraft(slot);
+      dirty.current = false;
+    }
+  }, [state, slot]);
+
+  const value = <T,>(name: string, fallback: T) => draft?.[name] ?? fallback;
+  return { draft, formRef, persist, persistIfDirty, value };
+}
+
+function DraftNotice({ slot, onReset }: { slot: string; onReset: () => void }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-xl bg-gold-100/60 px-3.5 py-2 text-sm text-ink-soft">
+      <span>已恢復上次未送出的內容</span>
+      <button
+        type="button"
+        onClick={() => {
+          clearDraft(slot);
+          onReset();
+        }}
+        className="btn btn-ghost min-h-8 shrink-0 px-2 text-sm text-gold-700"
+      >
+        清除重填
+      </button>
+    </div>
+  );
+}
+
+/** Draft rows are stored as items.0.service, items.0.amount, … */
+function draftItems(draft: DraftValues): (IncomeItem & { key: number })[] {
+  const indexes = new Set<number>();
+  for (const name of Object.keys(draft)) {
+    const match = /^items\.(\d+)\./.exec(name);
+    if (match) indexes.add(Number(match[1]));
+  }
+  return [...indexes]
+    .sort((a, b) => a - b)
+    .map((i) => ({
+      key: i,
+      service: draft[`items.${i}.service`] ?? "",
+      amount: Number(draft[`items.${i}.amount`]) || 0,
+      cost: Number(draft[`items.${i}.cost`]) || 0,
+    }));
 }
 
 function FormFooter({ pending, state, label }: { pending: boolean; state: ActionState; label: string }) {
@@ -157,38 +235,49 @@ function IncomeForm({
   lists,
   defaultDate,
   record,
+  slot,
   onDone,
+  onReset,
 }: {
   lists: PickLists;
   defaultDate: string;
   record?: IncomeRecord;
+  slot: string;
   onDone: () => void;
+  onReset: () => void;
 }) {
   const [state, action, pending] = useActionState(saveIncome, IDLE);
   useCloseOnSuccess(state, onDone);
+  const { draft, formRef, persist, persistIfDirty, value } = useDraft(slot, state);
 
   // Stable row keys: initial rows use their index; rows added later take the next counter
   // value inside the click handler (never during render).
   const nextKey = useRef(100);
-  const [items, setItems] = useState<(IncomeItem & { key: number })[]>(() =>
-    record?.items.length
+  const [items, setItems] = useState<(IncomeItem & { key: number })[]>(() => {
+    const fromDraft = draft ? draftItems(draft) : [];
+    if (fromDraft.length) return fromDraft;
+    return record?.items.length
       ? record.items.map((i, index) => ({ ...i, key: index }))
-      : [{ key: 0, service: "", amount: 0, cost: 0 }],
-  );
+      : [{ key: 0, service: "", amount: 0, cost: 0 }];
+  });
   const total = items.reduce((s, i) => s + (Number(i.amount) || 0), 0);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- re-save only when the rows change
+  useEffect(persistIfDirty, [items]);
+
   return (
-    <form action={action} className="grid gap-4">
+    <form ref={formRef} action={action} onChange={persist} className="grid gap-4">
       {record ? <input type="hidden" name="id" value={record.id} /> : null}
+      {draft ? <DraftNotice slot={slot} onReset={onReset} /> : null}
 
       <div className="grid grid-cols-2 gap-3">
         <label className="block">
           <span className="label">日期</span>
-          <input type="date" name="date" required defaultValue={record?.date ?? defaultDate} className="field" />
+          <input type="date" name="date" required defaultValue={value("date", record?.date ?? defaultDate)} className="field" />
         </label>
         <label className="block">
           <span className="label">付款方式</span>
-          <select name="paymentMethod" defaultValue={record?.paymentMethod ?? ""} className="field">
+          <select name="paymentMethod" defaultValue={value("paymentMethod", record?.paymentMethod ?? "")} className="field">
             <option value="">未選擇</option>
             <Options values={lists.paymentMethods} current={record?.paymentMethod} />
           </select>
@@ -201,7 +290,7 @@ function IncomeForm({
           <input
             name="customer"
             maxLength={60}
-            defaultValue={record?.customer}
+            defaultValue={value("customer", record?.customer)}
             placeholder="可留空"
             className="field"
             autoComplete="off"
@@ -213,7 +302,7 @@ function IncomeForm({
           <select
             name="artist"
             required={lists.artists.length > 0}
-            defaultValue={record?.artist ?? ""}
+            defaultValue={value("artist", record?.artist ?? "")}
             className="field"
           >
             <option value="" disabled={lists.artists.length > 0}>
@@ -263,7 +352,7 @@ function IncomeForm({
               }
               placeholder="實收"
               aria-label={`第 ${index + 1} 項實收金額`}
-              className="field tabular min-h-11 px-2.5"
+              className="field tabular min-h-11 px-2.5 sm:placeholder:text-transparent"
             />
             <input
               type="number"
@@ -274,7 +363,7 @@ function IncomeForm({
               defaultValue={item.cost || ""}
               placeholder="耗材成本"
               aria-label={`第 ${index + 1} 項耗材成本`}
-              className="field tabular min-h-11 px-2.5"
+              className="field tabular min-h-11 px-2.5 sm:placeholder:text-transparent"
             />
             <button
               type="button"
@@ -315,7 +404,7 @@ function IncomeForm({
             name="discount"
             min={0}
             step={1}
-            defaultValue={record?.discount || ""}
+            defaultValue={value("discount", record?.discount || "")}
             placeholder="0"
             className="field tabular"
           />
@@ -327,7 +416,13 @@ function IncomeForm({
 
       <label className="block">
         <span className="label">備註</span>
-        <textarea name="note" rows={2} maxLength={500} defaultValue={record?.note} className="field resize-y" />
+        <textarea
+          name="note"
+          rows={2}
+          maxLength={500}
+          defaultValue={value("note", record?.note)}
+          className="field resize-y"
+        />
       </label>
 
       <FormFooter pending={pending} state={state} label={record ? "更新收入" : "記下這筆收入"} />
@@ -339,24 +434,30 @@ function ExpenseForm({
   lists,
   defaultDate,
   record,
+  slot,
   onDone,
+  onReset,
 }: {
   lists: PickLists;
   defaultDate: string;
   record?: ExpenseRecord;
+  slot: string;
   onDone: () => void;
+  onReset: () => void;
 }) {
   const [state, action, pending] = useActionState(saveExpense, IDLE);
   useCloseOnSuccess(state, onDone);
+  const { draft, formRef, persist, value } = useDraft(slot, state);
 
   return (
-    <form action={action} className="grid gap-4">
+    <form ref={formRef} action={action} onChange={persist} className="grid gap-4">
       {record ? <input type="hidden" name="id" value={record.id} /> : null}
+      {draft ? <DraftNotice slot={slot} onReset={onReset} /> : null}
 
       <div className="grid grid-cols-2 gap-3">
         <label className="block">
           <span className="label">日期</span>
-          <input type="date" name="date" required defaultValue={record?.date ?? defaultDate} className="field" />
+          <input type="date" name="date" required defaultValue={value("date", record?.date ?? defaultDate)} className="field" />
         </label>
         <label className="block">
           <span className="label">金額</span>
@@ -367,7 +468,7 @@ function ExpenseForm({
             min={0}
             step={1}
             required
-            defaultValue={record?.amount || ""}
+            defaultValue={value("amount", record?.amount || "")}
             className="field tabular"
           />
         </label>
@@ -375,7 +476,7 @@ function ExpenseForm({
 
       <label className="block">
         <span className="label">成本類型</span>
-        <select name="category" required defaultValue={record?.category ?? ""} className="field">
+        <select name="category" required defaultValue={value("category", record?.category ?? "")} className="field">
           <option value="" disabled>
             請選擇
           </option>
@@ -389,7 +490,7 @@ function ExpenseForm({
           name="note"
           rows={2}
           maxLength={500}
-          defaultValue={record?.note}
+          defaultValue={value("note", record?.note)}
           placeholder="例如：凝膠補貨 12 色"
           className="field resize-y"
         />

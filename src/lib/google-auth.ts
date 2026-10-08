@@ -7,7 +7,8 @@
  */
 
 import { config } from "@/config";
-import { clearSession, getToken, refreshToken, type SessionUser, setSession } from "@/lib/session";
+import { clearDraftsFor } from "@/lib/drafts";
+import { clearSession, getToken, getUser, refreshToken, type SessionUser, setSession } from "@/lib/session";
 
 const GIS_SRC = "https://accounts.google.com/gsi/client";
 const SCOPES = [
@@ -154,6 +155,9 @@ export async function ensureToken(email: string): Promise<string> {
 }
 
 export function signOut() {
+  // Unsent drafts may hold customer names; don't leave them for the next person on this phone.
+  const user = getUser();
+  if (user) clearDraftsFor(user.email);
   const token = getToken();
   if (token) window.google?.accounts?.oauth2?.revoke(token);
   clearSession();
