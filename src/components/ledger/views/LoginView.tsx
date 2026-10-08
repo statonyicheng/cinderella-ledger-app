@@ -103,7 +103,8 @@ export function LoginView() {
           spells out the same surface with utilities. */}
       <div className="md:grid md:w-full md:max-w-4xl md:grid-cols-[1fr_1.05fr] md:overflow-hidden md:rounded-[var(--radius-card)] md:border md:border-line md:bg-veil/90 md:shadow-[var(--shadow-card)]">
         {/* Phones: the photo itself fades out (mask), revealing the real page background underneath. */}
-        <div className="relative h-[42dvh] min-h-64 overflow-hidden [mask-image:linear-gradient(to_bottom,black_65%,transparent)] md:h-auto md:min-h-[36rem] md:[mask-image:none]">
+        {/* The nude gradient stands in for the photo while it downloads, so the panel never looks empty. */}
+        <div className="relative h-[42dvh] min-h-64 overflow-hidden bg-linear-to-br from-nude-100 via-nude-50 to-marble-deep [mask-image:linear-gradient(to_bottom,black_65%,transparent)] md:h-auto md:min-h-[36rem] md:[mask-image:none]">
           <Image
             src={asset("/brand/nails.webp")}
             alt="仙度瑞拉的裸粉金箔杏仁形指甲作品"
@@ -122,7 +123,7 @@ export function LoginView() {
               width={640}
               height={640}
               priority
-              className="mx-auto size-36 drop-shadow-[0_8px_20px_rgb(43_35_32/0.12)] md:size-44"
+              className="mx-auto size-36 rounded-full bg-marble-deep drop-shadow-[0_8px_20px_rgb(43_35_32/0.12)] md:size-44"
             />
             <div className="gold-rule mx-auto my-6 w-2/3" />
             <p className="font-script text-lg text-gold-700 italic">The Atelier Ledger</p>
