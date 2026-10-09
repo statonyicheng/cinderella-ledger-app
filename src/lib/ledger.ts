@@ -3,6 +3,7 @@ import {
   deleteRowsById,
   ensureTabs,
   readRows,
+  readTabs,
   type Row,
   updateRowById,
 } from "@/lib/google-sheets";
@@ -155,8 +156,11 @@ const num = (v: unknown) => {
 
 export async function listIncome(): Promise<IncomeRecord[]> {
   await ready();
-  const [rows, itemRows] = await Promise.all([readRows(TABS.income), readRows(TABS.incomeItems)]);
+  const [rows, itemRows] = await readTabs([TABS.income, TABS.incomeItems]);
+  return parseIncome(rows, itemRows);
+}
 
+function parseIncome(rows: Row[], itemRows: Row[]): IncomeRecord[] {
   const itemsById = new Map<string, IncomeItem[]>();
   for (const r of itemRows) {
     const list = itemsById.get(str(r[0])) ?? [];
@@ -185,7 +189,10 @@ export async function listIncome(): Promise<IncomeRecord[]> {
 
 export async function listExpenses(): Promise<ExpenseRecord[]> {
   await ready();
-  const rows = await readRows(TABS.expense);
+  return parseExpenses(await readRows(TABS.expense));
+}
+
+function parseExpenses(rows: Row[]): ExpenseRecord[] {
   return rows
     .filter((r) => str(r[0]))
     .map((r) => ({
@@ -221,8 +228,13 @@ const seeding = new Map<string, Promise<string[]>>();
 
 export async function getPickList(list: PickList): Promise<string[]> {
   await ready();
+  return pickListFrom(list, await readRows(TABS[list]));
+}
+
+/** The names in a pick-list tab, seeding the defaults the first time it is found empty. */
+async function pickListFrom(list: PickList, rows: Row[]): Promise<string[]> {
   const tab = TABS[list];
-  const values = (await readRows(tab)).map((r) => str(r[0]).trim()).filter(Boolean);
+  const values = rows.map((r) => str(r[0]).trim()).filter(Boolean);
   // Duplicates can still come from the sheet itself (typed by hand, or two phones seeding at once).
   if (values.length > 0) return [...new Set(values)];
 
@@ -242,8 +254,46 @@ export async function getPickList(list: PickList): Promise<string[]> {
 
 export async function getShopName(): Promise<string> {
   await ready();
-  const row = (await readRows(TABS.settings)).find((r) => str(r[0]) === "店名");
+  return shopNameFrom(await readRows(TABS.settings));
+}
+
+function shopNameFrom(rows: Row[]): string {
+  const row = rows.find((r) => str(r[0]) === "店名");
   return str(row?.[1]) || "仙度瑞拉 Cinderella";
+}
+
+export interface LedgerSnapshot {
+  income: IncomeRecord[];
+  expenses: ExpenseRecord[];
+  lists: Record<PickList, string[]>;
+  shopName: string;
+}
+
+/** Everything the pages show, read with a single request. */
+export async function loadLedgerSnapshot(): Promise<LedgerSnapshot> {
+  await ready();
+  const [income, items, expenses, services, paymentMethods, expenseCategories, artists, settings] = await readTabs([
+    TABS.income,
+    TABS.incomeItems,
+    TABS.expense,
+    TABS.services,
+    TABS.paymentMethods,
+    TABS.expenseCategories,
+    TABS.artists,
+    TABS.settings,
+  ]);
+  const lists = await Promise.all([
+    pickListFrom("services", services),
+    pickListFrom("paymentMethods", paymentMethods),
+    pickListFrom("expenseCategories", expenseCategories),
+    pickListFrom("artists", artists),
+  ]);
+  return {
+    income: parseIncome(income, items),
+    expenses: parseExpenses(expenses),
+    lists: { services: lists[0], paymentMethods: lists[1], expenseCategories: lists[2], artists: lists[3] },
+    shopName: shopNameFrom(settings),
+  };
 }
 
 /* ----------------------------------------------------------------- writes */

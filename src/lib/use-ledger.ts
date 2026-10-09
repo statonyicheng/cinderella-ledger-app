@@ -3,14 +3,7 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
 import { DEMO_MODE, DEMO_USER } from "@/lib/demo";
-import {
-  type ExpenseRecord,
-  getPickList,
-  getShopName,
-  type IncomeRecord,
-  listExpenses,
-  listIncome,
-} from "@/lib/ledger";
+import { type LedgerSnapshot, loadLedgerSnapshot } from "@/lib/ledger";
 import { getDataVersion, getUser, type SessionUser, subscribe } from "@/lib/session";
 
 /** The signed-in user (or the demo user), re-rendering whenever the session changes. */
@@ -23,12 +16,7 @@ function useDataVersion() {
   return useSyncExternalStore(subscribe, getDataVersion, () => 0);
 }
 
-export interface LedgerData {
-  income: IncomeRecord[];
-  expenses: ExpenseRecord[];
-  lists: { services: string[]; paymentMethods: string[]; expenseCategories: string[]; artists: string[] };
-  shopName: string;
-}
+export type LedgerData = LedgerSnapshot;
 
 type Loadable<T> =
   | { status: "loading"; data?: T }
@@ -67,22 +55,31 @@ function useSheetQuery<T>(load: (user: SessionUser) => Promise<T>): Loadable<T> 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, version, attempt]);
 
-  const retry = useCallback(() => setAttempt((n) => n + 1), []);
+  const retry = useCallback(() => {
+    cached = null; // 再試一次 always asks Google afresh
+    setAttempt((n) => n + 1);
+  }, []);
   return { ...state, retry };
 }
 
-async function loadLedger(): Promise<LedgerData> {
-  // Sequential on purpose: the first call creates any missing tabs and seeds the pick-lists.
-  const services = await getPickList("services");
-  const [income, expenses, paymentMethods, expenseCategories, artists, shopName] = await Promise.all([
-    listIncome(),
-    listExpenses(),
-    getPickList("paymentMethods"),
-    getPickList("expenseCategories"),
-    getPickList("artists"),
-    getShopName(),
-  ]);
-  return { income, expenses, lists: { services, paymentMethods, expenseCategories, artists }, shopName };
+/**
+ * The last ledger read, shared by every page. Switching between 月曆 / 紀錄 / 報表 / 設定 within
+ * FRESH_MS reuses it instead of asking Google again (each person gets 60 reads a minute). Any
+ * write in this browser bumps the data version, which skips the cache; changes made on another
+ * phone show up once the cached copy is older than FRESH_MS.
+ */
+const FRESH_MS = 30_000;
+let cached: { key: string; at: number; promise: Promise<LedgerData> } | null = null;
+
+function loadLedger(user: SessionUser): Promise<LedgerData> {
+  const key = `${user.email}#${getDataVersion()}`;
+  if (cached && cached.key === key && Date.now() - cached.at < FRESH_MS) return cached.promise;
+  const promise = loadLedgerSnapshot().catch((error: unknown) => {
+    if (cached?.promise === promise) cached = null; // don't keep serving a failure
+    throw error;
+  });
+  cached = { key, at: Date.now(), promise };
+  return promise;
 }
 
 export function useLedger() {

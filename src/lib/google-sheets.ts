@@ -61,15 +61,28 @@ const demo = {
 
 /* ------------------------------------------------------- Google backend */
 
+/** Waits before retrying a request Google turned away for being too frequent: ~1s, 2s, 4s. */
+const RETRY_DELAYS_MS = [1000, 2000, 4000];
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 async function sheetsFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const user = getUser();
   if (!user) throw new SheetError("請先登入", 401);
-  const token = await ensureToken(user.email);
 
-  const res = await fetch(`${SHEETS_API}/${config.sheetId}${path}`, {
-    ...init,
-    headers: { authorization: `Bearer ${token}`, "content-type": "application/json", ...init?.headers },
-  });
+  // Google allows 60 reads and 60 writes per person per minute. Going over is free but answered
+  // with 429 (or 503 when Sheets itself is busy); waiting briefly and retrying is what Google
+  // recommends, so staff only see an error if it is still busy after ~7 seconds.
+  let res: Response;
+  for (let attempt = 0; ; attempt++) {
+    const token = await ensureToken(user.email);
+    res = await fetch(`${SHEETS_API}/${config.sheetId}${path}`, {
+      ...init,
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json", ...init?.headers },
+    });
+    const busy = res.status === 429 || res.status === 503;
+    if (!busy || attempt >= RETRY_DELAYS_MS.length) break;
+    await sleep(RETRY_DELAYS_MS[attempt] + Math.random() * 400);
+  }
   if (res.ok) return (await res.json()) as T;
 
   if (res.status === 401) throw new SheetError("登入已過期，請重新登入", 401);
@@ -161,11 +174,21 @@ export function ensureTabs(schema: Record<string, readonly string[]>): Promise<v
 
 /** All data rows of a tab (header row excluded). */
 export async function readRows(tab: string): Promise<Row[]> {
-  if (DEMO_MODE) return demo.readRows(tab);
-  const data = await sheetsFetch<{ values?: Row[] }>(
-    `/values/${a1(tab)}?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING`,
+  const [rows] = await readTabs([tab]);
+  return rows;
+}
+
+/**
+ * Data rows of several tabs in ONE request (values:batchGet), in the order asked. Reading the
+ * whole ledger this way costs one of the user's 60 reads per minute instead of one per tab.
+ */
+export async function readTabs(tabs: readonly string[]): Promise<Row[][]> {
+  if (DEMO_MODE) return tabs.map((tab) => demo.readRows(tab));
+  const ranges = tabs.map((tab) => `ranges=${a1(tab)}`).join("&");
+  const data = await sheetsFetch<{ valueRanges?: { values?: Row[] }[] }>(
+    `/values:batchGet?${ranges}&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING`,
   );
-  return (data.values ?? []).slice(1);
+  return tabs.map((_, i) => (data.valueRanges?.[i]?.values ?? []).slice(1));
 }
 
 export async function appendRows(tab: string, rows: Row[]): Promise<void> {
